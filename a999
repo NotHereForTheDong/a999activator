@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version=1.0.7
+version=1.0.8
 real_portable_folder="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$real_portable_folder"
 # Log file.
@@ -12,6 +12,31 @@ echo -e "A999 Activator (A9, iOS 9, 9 years later) v$version\n(C) 2025 Alex Free
 
 set_path
 
+restore_signed_ios_for_device() {
+    if [ $device = "iphone_6s_plus" ]; then
+        restore_ipsw https://updates.cdn-apple.com/2025FallFCS/fullrestores/082-67213/C471E1B8-CB73-4E02-8A9E-39166CD4FD28/iPhone_5.5_15.8.5_19H394_Restore.ipsw
+    elif [ $device = "iphone_6s" ]; then
+        restore_ipsw https://updates.cdn-apple.com/2025FallFCS/fullrestores/082-67136/AC6F1095-935D-4892-9D11-84BE311843B4/iPhone_4.7_15.8.5_19H394_Restore.ipsw
+    fi
+    
+    # Clean up.
+    restore_signed_ios=false
+
+    wait_for_normal_mode
+    echo "iOS 15.8.5 has been restored! It will take some additional time for it to start up into Setup.app, please wait..."
+ 
+    did_you_follow_instructions
+}
+
+restore_ios_10_2_1_for_device() {
+    # Needed for iOS 9.x
+    if [ $device = "iphone_6s" ]; then
+        restore_ipsw http://appldnld.apple.com/ios10.2.1/031-96803-20170112-6151BFBE-D81D-11E6-8553-F701D55B5B9D/iPhone_4.7_10.2.1_14D27_Restore.ipsw
+    elif [ $device = "iphone_6s_plus" ]; then
+        restore_ipsw http://appldnld.apple.com/ios10.2.1/031-96800-20170112-6151CD56-D81D-11E6-A447-F501D55B5B9D/iPhone_5.5_10.2.1_14D27_Restore.ipsw
+    fi
+}
+
 iproxy_start() {
     iproxy 6414 22 > /dev/null 2>&1 &
 }
@@ -22,19 +47,22 @@ iproxy_kill() {
 
 did_you_follow_instructions() {
     pair_iphone
-    read -p "* Activate the iPhone. IMPORTANT: If you are going to use cellular features on iOS 9, your SIM card should be in the iPhone with an active carrier. 
+    read -p "
+    
+1) Activate the iPhone. IMPORTANT: If you are going to use cellular features on iOS 9, your SIM card should be in the iPhone with an active carrier. 
 
-* Sign in to iCloud and complete Setup.app. Get to the home screen. 
+2) Sign in to iCloud and complete Setup.app. Get to the home screen. 
 
-* Make sure Find My iPhone has been turned off.
+3) Make sure Find My iPhone has been turned off.
 
-After all of the above is true press any key to continue..."
+After all of the above is true, press any key to continue..."
+
     wait_for_activation
 }
 
 is_activated() {
 
-    if ideviceinfo | grep -q "^ActivationState: Activated$"; then
+    if ideviceinfo 2>/dev/null | grep -q "^ActivationState: Activated$"; then
         return 0
     else
         return 1
@@ -55,9 +83,12 @@ start_rd() {
         iproxy_kill
         # Attempt to boot ramdisk...
         (cd bin/Legacy-iOS-Kit && ./restore.sh --no-version-check --no-internet-check --sshrd-boot-rd-only)
-        # Restart after ramdisk script kills our usbmuxd.
-        usbmuxd_reset   
+        
         # Start our own proxy for USB SSH fresh...
+        if [ "$os" = "Linux" ]; then
+            usbmuxd_restart_polling > /dev/null 2>&1
+        fi
+
         iproxy_kill
         iproxy_start
         echo "Waiting 5 seconds before testing SSH ramdisk connection, please standby..."
@@ -84,13 +115,14 @@ wait_for_activation()
 }
 
 got_all_activation_files() {
-    if [[ -f data/$device-$serial/activate/activation_records.tar.gz && \
-          -f data/$device-$serial/activate/data_ark.plist.tar.gz && \
-          -f data/$device-$serial/activate/IC-Info.sisv.tar.gz && \
-          -f data/$device-$serial/activate/com.apple.commcenter.device_specific_nobackup.plist.tar.gz && \
-          -f data/$device-$serial/activate/com.apple.factorydata.tar.gz ]]; then
+    if [[ -f data/"$device"_"$serial"/activate/activation_records.tar.gz && \
+          -f data/"$device"_"$serial"/activate/data_ark.plist.tar.gz && \
+          -f data/"$device"_"$serial"/activate/IC-Info.sisv.tar.gz && \
+          -f data/"$device"_"$serial"/activate/com.apple.commcenter.device_specific_nobackup.plist.tar.gz && \
+          -f data/"$device"_"$serial"/activate/com.apple.factorydata.tar.gz ]]; then
         return 0
     else
+        mkdir -p data/"$device"_"$serial"/activate
         return 1
     fi
 }
@@ -102,17 +134,17 @@ get_activation() {
     ios_version=$(ideviceinfo 2>/dev/null | grep "ProductVersion" | awk '{print $2}')
 
     # Set $not_normal when first connecting/detecting iPhone if it is in Recovery or DFU Mode.
-    if [ "$not_normal" == "true" ]; then
+    if [ "$not_normal" = "true" ]; then
         echo "Your iPhone is not in normal mode, so iOS version can not be determined. Restoring iPhone to iOS 15.8.5."
         restore_signed_ios=true
     elif [ "$ios_version" != "15.8.5" ]; then
         echo "Latest iOS version is not installed. Restoring iPhone to iOS 15.8.5."
         restore_signed_ios=true
-    elif [ "$ios_version" == "15.8.5" ]; then
+    elif [ "$ios_version" = "15.8.5" ]; then
         did_you_follow_instructions
     fi
 
-    if [ "$restore_signed_ios" == "true" ]; then
+    if [ "$restore_signed_ios" = "true" ]; then
         restore_signed_ios_for_device
     fi
 
@@ -198,9 +230,10 @@ get_activation() {
         expect "#"
 
         send "exit\r"
+        expect eof
 
         # Transfer tars to computer.
-        spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r -P 6414 root@127.0.0.1:/mnt1/activate data/$device-$serial
+        spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r -P 6414 root@127.0.0.1:/mnt1/activate "data/${device}_${serial}/"
         expect {
             "continue connecting" {
                 send "yes\r"
@@ -208,9 +241,12 @@ get_activation() {
             }
             "password:" {
                 send "alpine\r"
+                exp_continue
+            }
+            eof {
+                puts "Transfer complete"
             }
         }
-        expect eof  
 
         # Unmount and Reboot.
         spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 6414 root@127.0.0.1
@@ -231,7 +267,7 @@ get_activation() {
 EOF
 
         iproxy_kill
-
+        
         # Check to see if user follows instructions.  If not when we get back to restore_ipsw() it will prompt to go through get_activation() again.
         if ! got_all_activation_files; then
             echo "Error: not all activation files were backed up. Please make sure you complete all steps before activation files are backed up. A999 Activator will try getting activation files again."
@@ -275,9 +311,10 @@ downgrade() {
     send "mkdir /mnt1/Library/LaunchDaemons\r"
     expect "#"
     send "exit\r"
+    expect eof
 
     # Transfer activation tars to phone.
-    spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r -P 6414 data/$device-$serial/activate root@127.0.0.1:/mnt1
+    spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r -P 6414 "data/${device}_${serial}/activate" root@127.0.0.1:/mnt1
     expect {
         "continue connecting" {
             send "yes\r"
@@ -285,9 +322,12 @@ downgrade() {
         }
         "password:" {
             send "alpine\r"
+            exp_continue
+        }
+        eof {
+            puts "Transfer complete"
         }
     }
-    expect eof
 
     # Transfer launch daemon com.alex.activate.plist to host.
     spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 payload/com.alex.activate.plist root@127.0.0.1:/mnt1/Library/LaunchDaemons
@@ -298,9 +338,12 @@ downgrade() {
         }
         "password:" {
             send "alpine\r"
+            exp_continue
+        }
+        eof {
+            puts "Transfer complete"
         }
     }
-    expect eof
 
     # Transfer activate script to host.
     spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 payload/activate root@127.0.0.1:/mnt1/usr/bin
@@ -311,9 +354,12 @@ downgrade() {
         }
         "password:" {
             send "alpine\r"
+            exp_continue
+        }
+        eof {
+            puts "Transfer complete"
         }
     }
-    expect eof
 
     # Transfer freeze.tar to host.
     spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 bin/Legacy-iOS-Kit/resources/jailbreak/freeze.tar root@127.0.0.1:/mnt1
@@ -324,9 +370,12 @@ downgrade() {
         }
         "password:" {
             send "alpine\r"
+            exp_continue
+        }
+        eof {
+            puts "Transfer complete"
         }
     }
-    expect eof
 
     # Transfer launchctl.tar to host.
     spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 bin/Legacy-iOS-Kit/resources/jailbreak/launchctl.tar root@127.0.0.1:/mnt1
@@ -337,9 +386,12 @@ downgrade() {
         }
         "password:" {
             send "alpine\r"
+            exp_continue
+        }
+        eof {
+            puts "Transfer complete"
         }
     }
-    expect eof
 
     # Transfer io.pangu93.loader.plist to host.
     spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 bin/Legacy-iOS-Kit/resources/jailbreak/io.pangu93.loader.plist root@127.0.0.1:/mnt1/Library/LaunchDaemons
@@ -350,22 +402,12 @@ downgrade() {
         }
         "password:" {
             send "alpine\r"
-        }
-    }
-    expect eof
-
-    # Transfer plutil (from com.bingner.plutil_0.2.1_iphoneos-arm.deb) to host.
-    spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 payload/plutil root@127.0.0.1:/mnt1/usr/bin/plutil
-    expect {
-        "continue connecting" {
-            send "yes\r"
             exp_continue
         }
-        "password:" {
-            send "alpine\r"
+        eof {
+            puts "Transfer complete"
         }
     }
-    expect eof
 
     spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 6414 root@127.0.0.1
     expect {
@@ -375,21 +417,17 @@ downgrade() {
         }
         "password:" {
             send "alpine\r"
+            exp_continue
+        }
+        eof {
+            puts "Transfer complete"
         }
     }
-
-    expect "#"
 
     # Set permissions for activate.
     send "chmod 755 /mnt1/usr/bin/activate\r"
     expect "#"
     send "chown root:wheel /mnt1/usr/bin/activate\r"
-    expect "#"
-
-    # Set permissions for plutil.
-    send "chmod 755 /mnt1/usr/bin/plutil\r"
-    expect "#"
-    send "chown root:wheel /mnt1/usr/bin/plutil\r"
     expect "#"
 
     # Install chflags from ramdisk
@@ -451,6 +489,7 @@ downgrade() {
     send "chown 501:501 com.apple.springboard.plist\r"
     expect "#"
     send "exit\r"
+    expect eof
 
     # Unmount and Reboot. Spawn a new session because symlink trick is weird and prevents unmounting /mnt2.
     spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 6414 root@127.0.0.1
@@ -483,19 +522,8 @@ EOF
     boot_turdusra1n
     generate_boot_script
     echo "Activation was restored! You need to enable the jailbreak with http://jbme.ddw.nu in Safari everytime you boot, but your done!"
-
-    case "$ver" in
-        9.2*)
-            echo "IMPORTANT INFORMATION FOR iOS 9.2 AND iOS 9.2.1 USERS (WHICH YOU ARE): DO NOT SIGN IN TO ICLOUD IN SETUP.APP! It will not work. Instead, complete Setup.app without signing in and get to the home screen. Then, sign in to iCloud with the Settings app!"
-            ;;
-        9.3*)
-            echo "IMPORTANT INFORMATION FOR iOS 9.3, iOS 9.3.1, iOS 9.3.2, AND iOS 9.3.3 USERS (WHICH YOU ARE): iMessage and FaceTime do not work yet!"
-            if [ $device != "iphone_se" ]; then
-                echo "If you need iMessage and or FaceTime downgrade to iOS 9.2 or iOS 9.2.1 instead."
-            fi
-            ;;
-    esac
-
+    echo "DO NOT SIGN IN TO ICLOUD IN SETUP.APP! It will not work. Instead, complete Setup.app without signing in and get to the home screen. Then, sign in to iCloud with the Settings app!"
+    usbmuxd_restart
     echo -e "\nDONE!\n"
 }
 
@@ -505,10 +533,6 @@ iphone_6s_firmware_select() {
         "9.2 (13C75) (12/8/2015)"
         "9.2.1 (13D15) (1/19/2016)"
         #"9.2.1 (13D20) (2/18/2016)" Can't use because jbme doesn't support it
-        "9.3 (13E234) (3/21/2016)"
-        "9.3.1 (13E238) (3/31/2016)"
-        "9.3.2 (13F69) (5/16/2016)"
-        "9.3.3 (13G34) (7/18/2016)"
         "Exit"
     )
 
@@ -527,22 +551,6 @@ iphone_6s_firmware_select() {
                 #downgrade http://appldnld.apple.com/ios9.2.1/031-49377-20160217-4BB1908C-D44D-11E5-9900-0952919DCAD8/iPhone8,1_9.2.1_13D20_Restore.ipsw
                 #break;
                 #;;
-            "9.3 (13E234) (3/21/2016)")
-                downgrade http://appldnld.apple.com/iOS9.3/031-20814-20160321-50FF38D4-EAA8-11E5-AAA8-C479BD379832/iPhone8,1_9.3_13E234_Restore.ipsw
-                break;
-                ;;
-            "9.3.1 (13E238) (3/31/2016)")
-                downgrade http://appldnld.apple.com/iOS9.3.1/031-55114-20160331-09A05894-F5E6-11E5-861F-21CB2D794EB1/iPhone8,1_9.3.1_13E238_Restore.ipsw
-                break;
-                ;;
-            "9.3.2 (13F69) (5/16/2016)")
-                downgrade http://appldnld.apple.com/ios9.3.2/031-62431-20160516-5E51F038-13A9-11E6-ACFA-61D9400DF7EB/iPhone8,1_9.3.2_13F69_Restore.ipsw
-                break;
-                ;;
-            "9.3.3 (13G34) (7/18/2016)")
-                downgrade http://appldnld.apple.com/iOS9.3.3/031-60536-20160718-06EE469E-4378-11E6-8185-A7F759E0E9B6/iPhone8,1_9.3.3_13G34_Restore.ipsw
-                break;
-                ;;
             "Exit")
                 break
                 ;;
@@ -561,10 +569,6 @@ iphone_6s_plus_firmware_select() {
         "9.2 (13C75) (12/8/2015)"
         "9.2.1 (13D15) (1/19/2016)"
         #"9.2.1 (13D20) (2/18/2016)" can't use because jbme doesn't support it
-        "9.3 (13E234) (3/21/2016)"
-        "9.3.1 (13E238) (3/31/2016)"
-        "9.3.2 (13F69) (5/16/2016)"
-        "9.3.3 (13G34) (7/18/2016)"
         "Exit"
     )
 
@@ -583,22 +587,6 @@ iphone_6s_plus_firmware_select() {
                 #downgrade http://appldnld.apple.com/ios9.2.1/031-49073-20160217-4BB05046-D44D-11E5-9D30-0852919DCAD8/iPhone8,2_9.2.1_13D20_Restore.ipsw
                 #break;
                 #;;
-            "9.3 (13E234) (3/21/2016)")
-                downgrade http://appldnld.apple.com/iOS9.3/031-28376-20160321-51006FEC-EAA8-11E5-AEC6-D279BD379832/iPhone8,2_9.3_13E234_Restore.ipsw
-                break;
-                ;;
-            "9.3.1 (13E238) (3/31/2016)")
-                downgrade http://appldnld.apple.com/iOS9.3.1/031-54811-20160331-099896CC-F5E6-11E5-88BA-1ACB2D794EB1/iPhone8,2_9.3.1_13E238_Restore.ipsw
-                break;
-                ;;
-            "9.3.2 (13F69) (5/16/2016)")
-                downgrade http://appldnld.apple.com/ios9.3.2/031-62657-20160516-02ECC2F8-13AA-11E6-AFB3-D9DA400DF7EB/iPhone8,2_9.3.2_13F69_Restore.ipsw
-                break;
-                ;;
-            "9.3.3 (13G34) (7/18/2016)")
-                downgrade http://appldnld.apple.com/iOS9.3.3/031-60985-20160718-5C7A1B06-4378-11E6-8743-CEFC59E0E9B6/iPhone8,2_9.3.3_13G34_Restore.ipsw
-                break;
-                ;;
             "Exit")
                 break
                 ;;
@@ -609,56 +597,7 @@ iphone_6s_plus_firmware_select() {
     done
 }
 
-iphone_se_firmware_select() {
-
-    PS3="Select iOS version to downgrade to: "
-    options=(
-        "9.3 (13E232) (3/21/2016)"
-        "9.3.1 (13E238) (3/31/2016)"
-        "9.3.2 (13F69) (5/16/2016)"
-        "9.3.3 (13G34) (7/18/2016)"
-        "Exit"
-    )
-
-    select opt in "${options[@]}"
-    do
-        case $opt in
-            "9.3 (13E233) (3/21/2016)")
-                downgrade http://appldnld.apple.com/iOS9.3/031-20815-20160321-5102B932-EAA8-11E5-A488-C779BD379832/iPhone8,4_9.3_13E233_Restore.ipsw
-                break;
-                ;;
-            "9.3.1 (13E238) (3/31/2016)")
-                downgrade http://appldnld.apple.com/iOS9.3.1/031-55507-20160331-09A917D6-F5E6-11E5-BFDA-32CB2D794EB1/iPhone8,4_9.3.1_13E238_Restore.ipsw
-                break;
-                ;;
-            "9.3.2 (13F69) (5/16/2016)")
-                downgrade http://appldnld.apple.com/ios9.3.2/031-61688-20160516-6A0F5782-13A7-11E6-93C9-A4D6400DF7EB/iPhone8,4_9.3.2_13F69_Restore.ipsw
-                break;
-                ;;
-            "9.3.3 (13G34) (7/18/2016)")
-                downgrade http://appldnld.apple.com/iOS9.3.3/031-60143-20160718-06E90A30-4378-11E6-81DC-8EF759E0E9B6/iPhone8,4_9.3.3_13G34_Restore.ipsw
-                break;
-                ;;
-            "Exit")
-                break
-                ;;
-            *)
-                echo "Invalid option"
-                ;;
-        esac
-    done
-}
-
-# Begin actual execution. 
-
-# When this script exits, automatically restart usbmuxd as normal. We are root at this point that this takes effect (on Linux).
-cleanup() 
-{
-    if [ "$os" = "Linux" ]; then 
-        usbmuxd_reset
-    fi
-}
-trap cleanup EXIT
+# Begin actual execution.
 
 # Check for the existence of the binary launch daemon which is generated for the release by the build script.
 if [ ! -f "payload/com.alex.activate.plist" ]; then
@@ -667,22 +606,24 @@ if [ ! -f "payload/com.alex.activate.plist" ]; then
 fi
 
 # Update functionallity. We need to get 2 things, the data folder and any boot* scripts.
-if [ "$1" == "-u" ]; then
+if [ "$1" = "-u" ]; then
     if [ "$#" -ne 2 ]; then
         echo "You gave the -u argument, which expect an existing a999activator release directory as the following argument."
         exit 1
     fi
 
     update_existing_data "$2"
+    exit 0
 fi
 
 startup
 detect_iphone
 
-if [ $device == "iphone_6s_plus" ]; then
+if [ $device = "iphone_6s_plus" ]; then
     iphone_6s_plus_firmware_select
-elif [ $device == "iphone_6s" ]; then
+elif [ $device = "iphone_6s" ]; then
     iphone_6s_firmware_select
-elif [ $device == "iphone_se" ]; then
-    iphone_se_firmware_select
+else
+    echo "Error: only iPhone 6S and iPhone 6S Plus are supported by a999 activator."
+    exit 1
 fi

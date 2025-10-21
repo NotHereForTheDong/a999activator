@@ -81,15 +81,6 @@ tar zxvf /activate/com.apple.factorydata.tar.gz -C /System/Library/Caches
 # Make immutable.
 chflags -R schg /System/Library/Caches/com.apple.factorydata
 
-# Needed for iOS 9.3-9.3.3 to activate. THANKYOU JOHN: https://x.com/John011235/status/1756498551385755682
-# Remove Immutable flags if this has already been ran once by the launch daemon and now we are debuging.
-if [ -f "/var/mobile/Library/Caches/com.apple.MobileGestalt.plist" ]; then
-     chflags noschg /var/mobile/Library/Caches/com.apple.MobileGestalt.plist
-fi
-plutil -key CacheExtra -key a6vjPkzcRjrsXmniFsm0dg -true /var/mobile/Library/Caches/com.apple.MobileGestalt.plist 
-# Make immutable.
-chflags schg /var/mobile/Library/Caches/com.apple.MobileGestalt.plist
-
 # If previously ran because debug=true Setup.app has already been moved back.
 if [ -d "/Applications/Setup.bak" ]; then
     mv /Applications/Setup.bak /Applications/Setup.app
@@ -100,7 +91,6 @@ fi
 
 # This is being executed by the launch daemon.
 if [ "$debug" = "false" ]; then
-    rm /usr/bin/plutil
     rm /usr/bin/chflags
     rm /usr/bin/activate
     # This is rm -f because the launch daemon could have been deleted if debug=true and then debug=false.
