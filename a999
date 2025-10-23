@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version=1.0.8
+version=1.0.9
 real_portable_folder="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$real_portable_folder"
 # Log file.
@@ -306,7 +306,11 @@ downgrade() {
     expect "#"
     send "mount_hfs /dev/disk0s1s2 /mnt2\r"
     expect "#"
-    send "rm -rf /mnt1/activation\r"
+    send "rm -rf /mnt1/activate\r"
+    expect "#"
+    send "mkdir /mnt1/activate\r"
+    expect "#"
+    send "rm -rf /mnt1/Library/LaunchDaemons\r"
     expect "#"
     send "mkdir /mnt1/Library/LaunchDaemons\r"
     expect "#"

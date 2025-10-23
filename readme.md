@@ -26,19 +26,15 @@ For those unfamilar, A9 iOS 9 activation doesn't work normally anymore for many 
 
 ## Downloads
 
-### Version 1.0.8 (10/21/2025)
+### Version 1.0.9 (10/22/2025)
 
-* [a999activator-v1.0.8.zip](https://github.com/alex-free/a999activator/releases/download/v1.0.8/a999-activator-v1.0.8.zip) _For Mac OS and for Linux_
+* [a999activator-v1.0.9.zip](https://github.com/alex-free/a999activator/releases/download/v1.0.9/a999-activator-v1.0.9.zip) _For Mac OS and for Linux_
 
 A999 Activator is designed to work on Debian, Fedora, and Mac OS 10.12 or newer. x86_64 and ARM64 arches are supported.
 
 Changes:
 
-* Removes iOS 9.3.x support, since it can not truely be activated with this method due to Apple changes in that version and higher.
-
-* Cleaner USBMUXD handling on Linux. Correctly kills stale usbmuxd.
-
-* Improved expect script to work reliably on Linux. Fixes issue where `freeze.tar` transfer/extraction could fail.
+* Fixes issue with using newer SCP/SFTP it is expected that the destination already exists when transferring folders, which prevented activation.
 
 [Previous versions](changelog.md).
 
@@ -98,7 +94,7 @@ This error occurs on Linux when booting iOS 9. Disconnect and reconnect the ligh
 
 If your iPhone is stuck, force it into Recovery Mode. Then wait until your prompted to enter DFU Mode again, and try agan when it automatically prompts you.
 
-### Ramdisk Errors On iOS 9
+### Ramdisk Errors On iOS 9.
 
 This means turdus merula didn't restore iOS 9 correctly (known issue) and the ramdisk couldn't mount the filesystem correctly in order to continue. Exit out of the `a999` command  (`ctrl+c`) and execute the `a999` command again to get past it. 
 

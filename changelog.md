@@ -1,5 +1,19 @@
 # [A999 Activator: A9, iOS 9, 9 Years Later](readme.md) -> Changelog
 
+## Version 1.0.8 (10/21/2025)
+
+* [a999activator-v1.0.8.zip](https://github.com/alex-free/a999activator/releases/download/v1.0.8/a999-activator-v1.0.8.zip) _For Mac OS and for Linux_
+
+A999 Activator is designed to work on Debian, Fedora, and Mac OS 10.12 or newer. x86_64 and ARM64 arches are supported.
+
+Changes:
+
+* Removes iOS 9.3.x support, since it can not truely be activated with this method due to Apple changes in that version and higher.
+
+* Cleaner USBMUXD handling on Linux. Correctly kills stale usbmuxd.
+
+* Improved expect script to work reliably on Linux. Fixes issue where `freeze.tar` transfer/extraction could fail.
+
 ## Version 1.0.7 (10/12/2025)
 
 * [a999activator-v1.0.7.zip](https://github.com/alex-free/a999activator/releases/download/v1.0.7/a999-activator-v1.0.7.zip) _For Mac OS and for Linux_
