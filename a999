@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version=1.0.9
+version=1.1.0
 real_portable_folder="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$real_portable_folder"
 # Log file.
@@ -14,16 +14,16 @@ set_path
 
 restore_signed_ios_for_device() {
     if [ $device = "iphone_6s_plus" ]; then
-        restore_ipsw https://updates.cdn-apple.com/2025FallFCS/fullrestores/082-67213/C471E1B8-CB73-4E02-8A9E-39166CD4FD28/iPhone_5.5_15.8.5_19H394_Restore.ipsw
+        restore_ipsw https://updates.cdn-apple.com/2025FallFCS/fullrestores/047-95293/18A0749D-A68D-430C-8E31-1920612F3229/iPhone_5.5_15.8.7_19H411_Restore.ipsw
     elif [ $device = "iphone_6s" ]; then
-        restore_ipsw https://updates.cdn-apple.com/2025FallFCS/fullrestores/082-67136/AC6F1095-935D-4892-9D11-84BE311843B4/iPhone_4.7_15.8.5_19H394_Restore.ipsw
+        restore_ipsw https://updates.cdn-apple.com/2025FallFCS/fullrestores/047-95429/C8FE847C-FE0E-49B1-9C7E-F56894B6E2BF/iPhone_4.7_15.8.7_19H411_Restore.ipsw
     fi
     
     # Clean up.
     restore_signed_ios=false
 
     wait_for_normal_mode
-    echo "iOS 15.8.5 has been restored! It will take some additional time for it to start up into Setup.app, please wait..."
+    echo "iOS 15.8.7 has been restored! It will take some additional time for it to start up into Setup.app, please wait..."
  
     did_you_follow_instructions
 }
@@ -54,6 +54,8 @@ did_you_follow_instructions() {
 2) Sign in to iCloud and complete Setup.app. Get to the home screen. 
 
 3) Make sure Find My iPhone has been turned off.
+
+4) iPhone is trusted to this computer.
 
 After all of the above is true, press any key to continue..."
 
@@ -135,12 +137,12 @@ get_activation() {
 
     # Set $not_normal when first connecting/detecting iPhone if it is in Recovery or DFU Mode.
     if [ "$not_normal" = "true" ]; then
-        echo "Your iPhone is not in normal mode, so iOS version can not be determined. Restoring iPhone to iOS 15.8.5."
+        echo "Your iPhone is not in normal mode, so iOS version can not be determined. Restoring iPhone to iOS 15.8.7."
         restore_signed_ios=true
-    elif [ "$ios_version" != "15.8.5" ]; then
-        echo "Latest iOS version is not installed. Restoring iPhone to iOS 15.8.5."
+    elif [ "$ios_version" != "15.8.7" ]; then
+        echo "Latest iOS version is not installed. Restoring iPhone to iOS 15.8.7."
         restore_signed_ios=true
-    elif [ "$ios_version" = "15.8.5" ]; then
+    elif [ "$ios_version" = "15.8.7" ]; then
         did_you_follow_instructions
     fi
 
@@ -170,7 +172,7 @@ get_activation() {
         send "mount_filesystems\r"
         expect "#"
         
-        # Ramdisk allows RW of / on unjailbroken iOS 15.8.5. on /private/var we have stable RO. RW sometimes doesn't work, so use / as scratch dir.
+        # Ramdisk allows RW of / on unjailbroken iOS 15.8.7. on /private/var we have stable RO. RW sometimes doesn't work, so use / as scratch dir.
         send "mkdir /mnt1/activate\r"
         expect "#"
         
