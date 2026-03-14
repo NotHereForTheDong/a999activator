@@ -8,7 +8,9 @@ going_down() {
     uicache
     # Sync filesystem writes
     sync
-    sleep 5
+    sync
+    sync
+    sleep 30
     reboot
 }
 

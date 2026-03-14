@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version=1.1.0
+version=1.1.1
 real_portable_folder="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$real_portable_folder"
 # Log file.
@@ -8,9 +8,27 @@ exec > >(tee log.txt) 2>&1
 # Load common functions.
 source bin/idevice-tool-kit/idevice-tool-kit
 
-echo -e "A999 Activator (A9, iOS 9, 9 years later) v$version\n(C) 2025 Alex Free (3-BSD)\nhttps://github.com/alex-free/a999activator\n"
+echo -e "A999 Activator (A9, iOS 9, 9 years later) v$version\n(C) 2025-2026, Alex Free (3-BSD)\nhttps://github.com/alex-free/a999activator\n"
 
 set_path
+
+issh() {
+    sshpass -p 'alpine' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 6414 root@127.0.0.1 "$@"
+}
+
+# Arg 1 src
+# Arg 2 dst
+iscp() {
+    sshpass -p 'alpine' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 "${1}" "${2}"
+}
+
+# Recursive.
+# Arg 1 src
+# Arg 2 dst
+iscpr() {
+    sshpass -p 'alpine' scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 "${1}" "${2}"
+}
+
 
 restore_signed_ios_for_device() {
     if [ $device = "iphone_6s_plus" ]; then
@@ -155,118 +173,50 @@ get_activation() {
         # Send it...
         start_rd
 
-        expect <<EOF
         # Mount.
-        spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 6414 root@127.0.0.1
-        expect {
-            "continue connecting" {
-                send "yes\r"
-                exp_continue
-            }
-            "password:" {
-                send "alpine\r"
-            }
-        }
+        issh "mount_filesystems"
 
-        expect "#"
-        send "mount_filesystems\r"
-        expect "#"
-        
         # Ramdisk allows RW of / on unjailbroken iOS 15.8.7. on /private/var we have stable RO. RW sometimes doesn't work, so use / as scratch dir.
-        send "mkdir /mnt1/activate\r"
-        expect "#"
-        
+        issh "mkdir /mnt1/activate"
+            
         # Copy activation_records.
-        send "cp -a /mnt2/containers/Data/System/*/Library/activation_records /mnt1/activate/activation_records\r"
-        expect "#"
+        issh "cp -a /mnt2/containers/Data/System/*/Library/activation_records /mnt1/activate/activation_records"
 
         # Copy data_ark.plist.
-        send "cp -a /mnt2/containers/Data/System/*/Library/activation_records/../internal/data_ark.plist /mnt1/activate\r"
-        expect "#"
+        issh "cp -a /mnt2/containers/Data/System/*/Library/activation_records/../internal/data_ark.plist /mnt1/activate"
 
         # Copy IC-Info.sisv for notifications/ft/imessage/etc
-        send "cp -a /mnt2/mobile/Library/FairPlay/iTunes_Control/iTunes/IC-Info.sisv /mnt1/activate\r"
-        expect "#"
-
+        issh "cp -a /mnt2/mobile/Library/FairPlay/iTunes_Control/iTunes/IC-Info.sisv /mnt1/activate"
+            
         # Copy com.apple.commcenter.device_specific_nobackup.plist
-        send "cp -a /mnt2/wireless/Library/Preferences/com.apple.commcenter.device_specific_nobackup.plist /mnt1/activate\r"
-        expect "#"
-        
+        issh "cp -a /mnt2/wireless/Library/Preferences/com.apple.commcenter.device_specific_nobackup.plist /mnt1/activate"
+            
         # Copy com.apple.factorydata
-        send "cp -a /mnt1/System/Library/Caches/com.apple.factorydata /mnt1/activate/com.apple.factorydata\r"
-        expect "#"
+        issh "cp -a /mnt1/System/Library/Caches/com.apple.factorydata /mnt1/activate/com.apple.factorydata"
+            
+        # activation_records tar.
+        issh "cd /mnt1/activate; tar zcf activation_records.tar.gz activation_records; rm -r activation_records"
 
-        # Create tars.
-        send "cd /mnt1/activate\r"
-        expect "#"
-        
-        # activation_records.
-        send "tar zcf activation_records.tar.gz activation_records\r"
-        expect "#"
+        # data_ark.plist tar.
+        issh "cd /mnt1/activate; tar zcf data_ark.plist.tar.gz data_ark.plist; rm data_ark.plist"
 
-        # data_ark.plist.
-        send "tar zcf data_ark.plist.tar.gz data_ark.plist\r"
-        expect "#"
-        send "rm data_ark.plist\r"
-        expect "#"
-        
-        # IC-Info.sisv. 
+        # IC-Info.sisv tar. 
         # Silence error: "tar: copyfile pack (IC-Info.sisv) failed: No such file or directory" because we still get the file fine.
-        send "tar zcf IC-Info.sisv.tar.gz IC-Info.sisv > /dev/null 2>&1\r"
-        expect "#"
-        send "rm IC-Info.sisv\r"
-        expect "#"
+        issh "cd /mnt1/activate; tar zcf IC-Info.sisv.tar.gz IC-Info.sisv > /dev/null 2>&1; rm IC-Info.sisv"
 
-        # com.apple.commcenter.device_specific_nobackup.plist.
-        send "tar zcf com.apple.commcenter.device_specific_nobackup.plist.tar.gz com.apple.commcenter.device_specific_nobackup.plist\r"
-        expect "#"
-        send "rm com.apple.commcenter.device_specific_nobackup.plist\r"
-        expect "#"
+        # com.apple.commcenter.device_specific_nobackup.plist tar.
+        issh "cd /mnt1/activate; tar zcf com.apple.commcenter.device_specific_nobackup.plist.tar.gz com.apple.commcenter.device_specific_nobackup.plist; rm com.apple.commcenter.device_specific_nobackup.plist"
 
-        # com.apple.factorydata.
-        send "tar zcf com.apple.factorydata.tar.gz com.apple.factorydata\r"
-        expect "#"
-
-        # Delete all directories.
-        send "rm -rf */\r"
-        expect "#"
-
-        send "exit\r"
-        expect eof
+        # com.apple.factorydata tar.
+        issh "cd /mnt1/activate; tar zcf com.apple.factorydata.tar.gz com.apple.factorydata; rm -r com.apple.factorydata"
 
         # Transfer tars to computer.
-        spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r -P 6414 root@127.0.0.1:/mnt1/activate "data/${device}_${serial}/"
-        expect {
-            "continue connecting" {
-                send "yes\r"
-                exp_continue
-            }
-            "password:" {
-                send "alpine\r"
-                exp_continue
-            }
-            eof {
-                puts "Transfer complete"
-            }
-        }
-
-        # Unmount and Reboot.
-        spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 6414 root@127.0.0.1
-        expect {
-            "continue connecting" {
-                send "yes\r"
-                exp_continue
-            }
-            "password:" {
-                send "alpine\r"
-            }
-        }
-
-        expect "#"
-        send "reboot\r"
-        expect "closed by remote host."
-        expect eof
-EOF
+        iscpr "root@localhost:/mnt1/activate" "data/${device}_${serial}/"
+            
+        # Unmount and reboot
+        issh "/sbin/umount /mnt1"
+        issh "/sbin/umount /mnt2"
+        issh "/sbin/reboot"
 
         iproxy_kill
         
@@ -278,7 +228,7 @@ EOF
     done
 }
 
-downgrade() {    
+downgrade() { 
     # Get Activation files.
     while ! got_all_activation_files; do
         get_activation
@@ -290,240 +240,86 @@ downgrade() {
     restore_ipsw $1
     start_rd
 
-    expect <<EOF
-    # Set up /.
-    spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 6414 root@127.0.0.1
-    expect {
-        "continue connecting" {
-            send "yes\r"
-            exp_continue
-        }
-        "password:" {
-            send "alpine\r"
-        }
-    }
-
-    expect "#"
-    send "mount_hfs /dev/disk0s1s1 /mnt1\r"
-    expect "#"
-    send "mount_hfs /dev/disk0s1s2 /mnt2\r"
-    expect "#"
-    send "rm -rf /mnt1/activate\r"
-    expect "#"
-    send "mkdir /mnt1/activate\r"
-    expect "#"
-    send "rm -rf /mnt1/Library/LaunchDaemons\r"
-    expect "#"
-    send "mkdir /mnt1/Library/LaunchDaemons\r"
-    expect "#"
-    send "exit\r"
-    expect eof
+    # Mount.
+    issh "/sbin/mount_hfs /dev/disk0s1s1 /mnt1"
+    issh "/sbin/mount_hfs /dev/disk0s1s2 /mnt2"
+    
+    # Create folders.
+    issh "rm -rf /mnt1/activate"
+    issh "mkdir /mnt1/activate"
+    issh "rm -rf /mnt1/Library/LaunchDaemons"
+    issh "mkdir /mnt1/Library/LaunchDaemons"
 
     # Transfer activation tars to phone.
-    spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r -P 6414 "data/${device}_${serial}/activate" root@127.0.0.1:/mnt1
-    expect {
-        "continue connecting" {
-            send "yes\r"
-            exp_continue
-        }
-        "password:" {
-            send "alpine\r"
-            exp_continue
-        }
-        eof {
-            puts "Transfer complete"
-        }
-    }
+    iscpr "data/${device}_${serial}/activate" "root@127.0.0.1:/mnt1"
 
     # Transfer launch daemon com.alex.activate.plist to host.
-    spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 payload/com.alex.activate.plist root@127.0.0.1:/mnt1/Library/LaunchDaemons
-    expect {
-        "continue connecting" {
-            send "yes\r"
-            exp_continue
-        }
-        "password:" {
-            send "alpine\r"
-            exp_continue
-        }
-        eof {
-            puts "Transfer complete"
-        }
-    }
+    iscp "payload/com.alex.activate.plist" "root@127.0.0.1:/mnt1/Library/LaunchDaemons"
 
     # Transfer activate script to host.
-    spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 payload/activate root@127.0.0.1:/mnt1/usr/bin
-    expect {
-        "continue connecting" {
-            send "yes\r"
-            exp_continue
-        }
-        "password:" {
-            send "alpine\r"
-            exp_continue
-        }
-        eof {
-            puts "Transfer complete"
-        }
-    }
+    iscp "payload/activate" "root@127.0.0.1:/mnt1/usr/bin"
 
     # Transfer freeze.tar to host.
-    spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 bin/Legacy-iOS-Kit/resources/jailbreak/freeze.tar root@127.0.0.1:/mnt1
-    expect {
-        "continue connecting" {
-            send "yes\r"
-            exp_continue
-        }
-        "password:" {
-            send "alpine\r"
-            exp_continue
-        }
-        eof {
-            puts "Transfer complete"
-        }
-    }
+    iscp "bin/Legacy-iOS-Kit/resources/jailbreak/freeze.tar" "root@127.0.0.1:/mnt1"
 
     # Transfer launchctl.tar to host.
-    spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 bin/Legacy-iOS-Kit/resources/jailbreak/launchctl.tar root@127.0.0.1:/mnt1
-    expect {
-        "continue connecting" {
-            send "yes\r"
-            exp_continue
-        }
-        "password:" {
-            send "alpine\r"
-            exp_continue
-        }
-        eof {
-            puts "Transfer complete"
-        }
-    }
+    iscp "bin/Legacy-iOS-Kit/resources/jailbreak/launchctl.tar" "root@127.0.0.1:/mnt1"
 
     # Transfer io.pangu93.loader.plist to host.
-    spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P 6414 bin/Legacy-iOS-Kit/resources/jailbreak/io.pangu93.loader.plist root@127.0.0.1:/mnt1/Library/LaunchDaemons
-    expect {
-        "continue connecting" {
-            send "yes\r"
-            exp_continue
-        }
-        "password:" {
-            send "alpine\r"
-            exp_continue
-        }
-        eof {
-            puts "Transfer complete"
-        }
-    }
-
-    spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 6414 root@127.0.0.1
-    expect {
-        "continue connecting" {
-            send "yes\r"
-            exp_continue
-        }
-        "password:" {
-            send "alpine\r"
-            exp_continue
-        }
-        eof {
-            puts "Transfer complete"
-        }
-    }
+    iscp "bin/Legacy-iOS-Kit/resources/jailbreak/io.pangu93.loader.plist" "root@127.0.0.1:/mnt1/Library/LaunchDaemons"
 
     # Set permissions for activate.
-    send "chmod 755 /mnt1/usr/bin/activate\r"
-    expect "#"
-    send "chown root:wheel /mnt1/usr/bin/activate\r"
-    expect "#"
+    issh "chmod 755 /mnt1/usr/bin/activate"
+    issh "/usr/sbin/chown root:wheel /mnt1/usr/bin/activate"
 
     # Install chflags from ramdisk
-    send "cp -a /usr/bin/chflags /mnt1/usr/bin/chflags\r"
-    expect "#"
+    issh "cp -a /usr/bin/chflags /mnt1/usr/bin/chflags"
 
     # Set permissions for launch daemon com.alex.activate.plist.
-    expect "#"
-    send "chmod 644 /mnt1/Library/LaunchDaemons/com.alex.activate.plist\r"
-    expect "#"
-    send "chown root:wheel /mnt1/Library/LaunchDaemons/com.alex.activate.plist\r"
-    expect "#"
+    issh "chmod 644 /mnt1/Library/LaunchDaemons/com.alex.activate.plist"
+    issh "/usr/sbin/chown root:wheel /mnt1/Library/LaunchDaemons/com.alex.activate.plist"
     
     # Move Setup.app to prevent possible deactivation causing it to trigger.
-    send "mv /mnt1/Applications/Setup.app /mnt1/Applications/Setup.bak\r"
-    expect "#"
+    issh "mv /mnt1/Applications/Setup.app /mnt1/Applications/Setup.bak"
     
     # BEGIN JAILBREAK BOOTSTRAP INSTALLATION.
     # Set permissions for launch daemon io.pangu93.loader.plist.
-    send "chmod 644 /mnt1/Library/LaunchDaemons/io.pangu93.loader.plist \r"
-    expect "#"
-    send "chown root:wheel /mnt1/Library/LaunchDaemons/io.pangu93.loader.plist\r"
-    expect "#"
-
-    send "cd /mnt1\r"
-    expect "#"
+    issh "chmod 644 /mnt1/Library/LaunchDaemons/io.pangu93.loader.plist"
+    issh "/usr/sbin/chown root:wheel /mnt1/Library/LaunchDaemons/io.pangu93.loader.plist"
 
     # Extract freeze.tar.
-    send "tar -xf freeze.tar -C .\r"
-    expect "#"
-    send "rm freeze.tar\r"
-    expect "#"
+    issh "cd /mnt1; tar -xf freeze.tar -C .; rm freeze.tar"
 
     # Extract launchctl.tar.
-    send "tar -xf launchctl.tar -C .\r"
-    expect "#"
-    send "rm launchctl.tar\r"
-    expect "#"
+    issh "cd /mnt1; tar -xf launchctl.tar -C .; rm launchctl.tar"
 
     # Is this the symlink trick to write to /var?) 
-    send "mv private/var/lib private\r"
-    expect "#"
-    send "mv private/var/mobile/Library/Preferences/com.apple.springboard.plist private\r"
-    expect "#"
-    send "rm -r private/var/*\r"
-    expect "#"
-    send "touch .cydia_no_stash\r"
-    expect "#"
-    send "cd /mnt2\r"
-    expect "#"
-    send "ln -s /private/lib\r"
-    expect "#"
-    send "cd mobile/Library/Preferences\r"
-    expect "#"
-    send "rm -f com.apple.springboard.plist\r"
-    expect "#"
-    send "ln -s /private/com.apple.springboard.plist\r"
-    expect "#"
-    send "chown 501:501 com.apple.springboard.plist\r"
-    expect "#"
-    send "exit\r"
-    expect eof
+    issh "cd /mnt1; mv private/var/lib private"
+    
+    issh "cd /mnt1; mv private/var/mobile/Library/Preferences/com.apple.springboard.plist private"
 
-    # Unmount and Reboot. Spawn a new session because symlink trick is weird and prevents unmounting /mnt2.
-    spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 6414 root@127.0.0.1
-    expect {
-        "continue connecting" {
-            send "yes\r"
-            exp_continue
-        }
-        "password:" {
-            send "alpine\r"
-        }
-    }
+    issh "cd /mnt1; rm -r private/var/*"
 
-    expect "#"
-    send "umount /mnt1\r"
-    expect "#"
-    send "umount /mnt2\r"
-    expect "#"
-    send "reboot\r"
-    expect "closed by remote host."
-    expect eof
-EOF
+    issh "cd /mnt1; touch .cydia_no_stash"
+
+    issh "cd /mnt2; ln -s /private/lib"
+
+    issh "rm -f /mnt2/mobile/Library/Preferences/com.apple.springboard.plist"
+
+    issh "cd /mnt2/mobile/Library/Preferences; ln -s /private/com.apple.springboard.plist"
+    
+    issh "cd /mnt2/mobile/Library/Preferences; /usr/sbin/chown 501:501 com.apple.springboard.plist"
+
+    # Unmount and reboot
+    issh "/sbin/umount /mnt1"
+    issh "/sbin/umount /mnt2"
+    issh "/sbin/reboot"
 
     iproxy_kill
     boot_turdusra1n
     
-    echo "Your iPhone is now jailbroken! You need to enable it now by visiting http://jbme.ddw.nu/ in Safari after signing in to your WiFi. Once the jailbreak is enabled, your iPhone will automatically reboot into Recovery Mode after restoring activation. Do not sign in to iCloud just yet! a999activator is going to start checking for Recovery Mode in 45 seconds so that the LAST STEP can be completed!"
-    sleep 45
+    echo "Your iPhone is now jailbroken! You need to enable it now by visiting http://jbme.ddw.nu/ in Safari after signing in to your WiFi. Once the jailbreak is enabled, it will take 30 additional seconds from that point for your iPhone to automatically reboot into Recovery Mode after restoring activation. Do not sign in to iCloud just yet! a999activator is going to start checking for Recovery Mode in 60 seconds so that the LAST STEP can be completed!"
+    sleep 60
 
     boot_turdusra1n
     generate_boot_script
