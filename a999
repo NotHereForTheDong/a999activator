@@ -252,7 +252,7 @@ downgrade() {
     # Enable all steps for final restore.
     not_final_restore=false
     restore_ipsw $1
-    exit_recovery
+    #exit_recovery
     start_rd
 
     # Mount.
@@ -338,7 +338,7 @@ downgrade() {
     issh "/sbin/reboot"
 
     iproxy_kill
-    exit_recovery
+    #exit_recovery
     boot_turdusra1n
     
     echo "Your iPhone is now jailbroken! You need to enable it now by visiting http://jbme.ddw.nu/ in Safari after signing in to your WiFi. Once the jailbreak is enabled, it will take 30 additional seconds from that point for your iPhone to automatically reboot into Recovery Mode after restoring activation. Do not sign in to iCloud just yet! a999activator is going to start checking for Recovery Mode in 60 seconds so that the LAST STEP can be completed!"
